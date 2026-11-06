@@ -245,6 +245,22 @@ def create_app(store: BoxStore, remote: Remote, token: Optional[str] = None,
     async def box_info(name: str) -> Dict[str, Any]:
         return await agent(box_or_404(name), "info", timeout=30)
 
+    @app.get("/api/fleet", dependencies=[Depends(auth)])
+    async def fleet() -> Dict[str, Any]:
+        """Toàn bộ máy của MỌI box trong 1 request — cho dashboard "Tất cả máy".
+        Box nào SSH không được vẫn trả item kèm 'error' (dashboard tự hiển thị)."""
+
+        async def one(b: Box) -> Dict[str, Any]:
+            try:
+                d = await remote.agent(b, "list", timeout=45)
+                return {"name": b.name, "devices": (d or {}).get("devices", []),
+                        "unsafe": (d or {}).get("unsafe", [])}
+            except Exception as e:   # noqa: BLE001
+                return {"name": b.name, "error": str(e)[:200], "devices": [], "unsafe": []}
+
+        res = await asyncio.gather(*(one(b) for b in store.boxes))
+        return {"boxes": list(res), "at": time.time()}
+
     @app.get("/api/boxes/{name}/devices", dependencies=[Depends(auth)])
     async def box_devices(name: str) -> Dict[str, Any]:
         return await agent(box_or_404(name), "list", timeout=60)

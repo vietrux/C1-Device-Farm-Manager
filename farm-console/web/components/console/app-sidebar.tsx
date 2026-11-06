@@ -1,6 +1,6 @@
 "use client"
 
-import { PlusIcon, ServerIcon } from "lucide-react"
+import { LayoutGridIcon, PlusIcon, ServerIcon } from "lucide-react"
 
 import {
   Sidebar,
@@ -26,6 +26,8 @@ export function AppSidebar({
   current,
   onSelect,
   onAdd,
+  onFleet,
+  fleetActive,
   version,
 }: {
   boxes: Box[] | null
@@ -33,6 +35,8 @@ export function AppSidebar({
   current: string | null
   onSelect: (name: string) => void
   onAdd: () => void
+  onFleet: () => void
+  fleetActive: boolean
   version?: string
 }) {
   return (
@@ -51,6 +55,24 @@ export function AppSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Tổng quan</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  isActive={fleetActive}
+                  onClick={onFleet}
+                  tooltip="Toàn bộ phone của mọi box"
+                  size="lg"
+                >
+                  <LayoutGridIcon />
+                  <span>Tất cả máy</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
         <SidebarGroup>
           <SidebarGroupLabel>Box</SidebarGroupLabel>
           <SidebarGroupAction title="Thêm box" onClick={onAdd}>

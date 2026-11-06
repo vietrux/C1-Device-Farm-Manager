@@ -25,6 +25,8 @@ class FakeRemote:
         self.boot_after = 2
         self.boot_polls = 0
         self.load = 0.5
+        self.list_devices: List[dict] = []
+        self.fail_list_for: set = set()
 
     async def agent(self, box, *args: str, timeout: float = 60, raw: bool = False) -> Any:
         self.calls.append(args)
@@ -32,7 +34,9 @@ class FakeRemote:
         if cmd == "info":
             return {"hostname": "b", "load": [0.1, 0.1, 0.1], "cpus": 8}
         if cmd == "list":
-            return {"devices": [], "unsafe": []}
+            if box.name in self.fail_list_for:
+                raise RemoteError("ssh không được")
+            return {"devices": self.list_devices, "unsafe": []}
         if cmd == "profiles":
             return {"profiles": [{"key": "pixel6", "model": "Pixel 6",
                                   "device": "oriole", "fingerprint": "google/oriole/..."}]}
@@ -167,6 +171,22 @@ def test_add_list_remove_box_never_leaks_password(env):
     assert "secret-test-pw" not in c.get("/api/boxes").text
     assert c.delete("/api/boxes/b1").status_code == 200
     assert c.get("/api/boxes").json() == []
+
+
+def test_fleet_all_boxes_in_one_call(env):
+    """GET /api/fleet: gộp máy của mọi box trong 1 request; box lỗi vẫn 200 kèm error."""
+    c, store, remote, _ = env
+    store.add("b1", "user@h", "p")
+    store.add("b2", "user@h2", "p")
+    remote.list_devices = [{"name": "phone-1", "vendor": False, "state": "running"}]
+    remote.fail_list_for = {"b2"}
+    r = c.get("/api/fleet").json()
+    assert [b["name"] for b in r["boxes"]] == ["b1", "b2"]
+    b1 = next(b for b in r["boxes"] if b["name"] == "b1")
+    b2 = next(b for b in r["boxes"] if b["name"] == "b2")
+    assert b1["devices"][0]["name"] == "phone-1"     # gộp được
+    assert b1.get("error") is None
+    assert "error" in b2 and b2["devices"] == []      # box lỗi vẫn hiện, không sập cả cụm
 
 
 def test_unknown_box_404(env):

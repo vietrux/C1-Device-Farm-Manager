@@ -51,6 +51,13 @@ export type Device = {
   boot_completed: boolean | null
 }
 export type DeviceList = { devices: Device[]; unsafe: string[] }
+export type FleetBox = {
+  name: string
+  error?: string
+  devices: Device[]
+  unsafe: string[]
+}
+export type Fleet = { boxes: FleetBox[]; at: number }
 export type Image = {
   ref: string
   size: string

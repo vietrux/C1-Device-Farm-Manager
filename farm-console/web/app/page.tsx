@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { AppSidebar } from "@/components/console/app-sidebar"
 import { BoxView } from "@/components/console/box-view"
 import { useConfirm } from "@/components/console/confirm"
+import { FleetView } from "@/components/console/fleet-view"
 import {
   AddBoxDialog,
   CopyIdDialog,
@@ -46,6 +47,7 @@ export default function Page() {
   const [boxes, setBoxes] = React.useState<Box[] | null>(null)
   const [infos, setInfos] = React.useState<Record<string, BoxInfo | Err>>({})
   const [current, setCurrent] = React.useState<string | null>(null)
+  const [fleetOpen, setFleetOpen] = React.useState(false)
   const [devices, setDevices] = React.useState<DeviceList | Err | null>(null)
   const [prov, setProv] = React.useState<
     Record<string, { items: ProvItem[]; at: number; raw: string[] }>
@@ -59,7 +61,10 @@ export default function Page() {
     title: string
     lines: string[]
   } | null>(null)
-  const [screen, setScreen] = React.useState<string | null>(null)
+  const [screen, setScreen] = React.useState<{
+    box: string
+    device: string
+  } | null>(null)
   const { confirm, node: confirmNode } = useConfirm()
   const currentRef = React.useRef(current)
   currentRef.current = current
@@ -174,9 +179,11 @@ export default function Page() {
   }
 
   const showLogs = async (dev: string) => {
+    const b = screen?.box ?? current
+    if (!b) return
     try {
       const r = await api<{ logs: string }>(
-        `/api/boxes/${enc(current!)}/devices/${enc(dev)}/logs?n=300`
+        `/api/boxes/${enc(b)}/devices/${enc(dev)}/logs?n=300`
       )
       setLogView({ title: `Log ${dev}`, lines: r.logs.split("\n") })
       setJobOpen(true)
@@ -191,12 +198,22 @@ export default function Page() {
         boxes={boxes}
         infos={infos}
         current={current}
-        onSelect={setCurrent}
+        onSelect={(name) => {
+          setFleetOpen(false)
+          setCurrent(name)
+        }}
         onAdd={() => setAddOpen(true)}
+        onFleet={() => setFleetOpen(true)}
+        fleetActive={fleetOpen}
         version={meta?.version}
       />
       <SidebarInset>
-        {box ? (
+        {fleetOpen ? (
+          <FleetView
+            paused={!!screen}
+            onScreen={(box, device) => setScreen({ box, device })}
+          />
+        ) : box ? (
           <BoxView
             key={box.name}
             box={box}
@@ -207,7 +224,7 @@ export default function Page() {
             onJob={startJob}
             onCopyId={() => setCopyOpen(true)}
             onCreate={() => setCreateOpen(true)}
-            onScreen={setScreen}
+            onScreen={(dev) => setScreen({ box: box.name, device: dev })}
             paused={!!screen}
             onRemoveBox={removeBox}
             confirm={confirm}
@@ -269,8 +286,8 @@ export default function Page() {
             }
           />
           <ScreenDialog
-            box={current}
-            device={screen}
+            box={screen?.box ?? current}
+            device={screen?.device ?? null}
             onClose={() => setScreen(null)}
             scrcpy={!!meta?.scrcpy}
             onLogs={showLogs}
