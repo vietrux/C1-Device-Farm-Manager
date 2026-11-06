@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+node_modules/
+.next/
+farm-console/web/out/
+farm-console/web/next-env.d.ts
+*.tsbuildinfo
+*.log
+# keybox là dữ liệu riêng — tuyệt đối không commit
+tools/integrity/keyboxes/
+*.keybox.xml
+*.pem.private

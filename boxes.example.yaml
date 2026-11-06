@@ -1,0 +1,8 @@
+# Sao chép thành ~/.config/farm-console/boxes.yaml rồi điền thông tin box của bạn.
+# File này chứa mật khẩu — console đặt permission 600 khi tự ghi; tự tạo thì nên
+# chmod 600. Đừng commit file thật vào repo.
+boxes:
+  - name: box-01
+    ssh: user@100.x.y.z          # địa chỉ Tailscale của box
+    sudo_password: mat-khau-sudo # mật khẩu sudo của user trên box
+    note: box đầu tiên

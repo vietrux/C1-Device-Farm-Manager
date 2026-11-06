@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+PyYAML
+cryptography
+requests
+
+[test]
+pytest
+httpx

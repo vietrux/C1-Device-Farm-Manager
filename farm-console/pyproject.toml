@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "farm-console"
+version = "0.1.0"
+description = "Web console quản lý nhiều box RK3588 và máy Android trên đó (qua SSH)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "PyYAML",
+    "cryptography",   # validate keybox chains (console/keybox.py)
+    "requests",       # online revocation check (fallback to cached status.json)
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "httpx",
+]
+
+[project.scripts]
+farm-console = "console.cli:main"
+
+[tool.setuptools]
+packages = ["console"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
