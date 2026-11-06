@@ -4,6 +4,7 @@ export type Box = {
   name: string
   ssh: string
   note: string
+  main_image?: string | null
   has_password: boolean
 }
 

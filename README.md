@@ -23,7 +23,11 @@ trình duyệt ──HTTP (localhost)──> farm-console (FastAPI, chạy trên
   Chủ box cung cấp: địa chỉ Tailscale (dạng `100.x.y.z`) + tài khoản SSH + mật
   khẩu sudo của box.
 - Box: đã được chủ box provision sẵn (docker, `df-br`, tee-supplicant, Tailscale).
-  Tool này KHÔNG provision box mới — hỏi chủ box nếu cần.
+  Box **mới tinh chưa provision**: thêm vào `boxes.yaml` rồi bấm nút
+  **Chuẩn hoá** — 1 bấm trọn gói: lược hệ vendor, cài resetprop (hồ sơ thiết
+  bị cho máy), nạp image chính lên box nếu còn thiếu (cần kho image
+  `~/.cache/devicefarm/images` — xem `tools/box/farm-image.sh` — và
+  `./tools/integrity/fetch-assets.sh` cho resetprop).
 
 ## Cài đặt & chạy (một lệnh)
 

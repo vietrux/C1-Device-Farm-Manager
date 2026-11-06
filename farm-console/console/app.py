@@ -52,7 +52,8 @@ def _load1(st: Any) -> float:
         return float((st.get("load") or [0])[0])
     except (TypeError, ValueError, IndexError):
         return 0.0
-PROVISION_MODES = {"check": ["check"], "apply": ["apply"], "takeover": ["apply", "--takeover"],
+PROVISION_MODES = {"check": ["check"], "apply": ["apply", "--takeover"],
+                   "takeover": ["apply", "--takeover"],   # bí danh cũ của apply
                    "revert": ["revert"]}
 
 
@@ -191,7 +192,12 @@ def create_app(store: BoxStore, remote: Remote, token: Optional[str] = None,
     # ------------------------------------------------------------------ boxes
     @app.get("/api/boxes", dependencies=[Depends(auth)])
     def list_boxes() -> List[Dict[str, Any]]:
-        return [b.public() for b in store.boxes]
+        out = []
+        for b in store.boxes:
+            d = b.public()
+            d["main_image"] = b.main_image or store.default_main_image
+            out.append(d)
+        return out
 
     @app.post("/api/boxes", dependencies=[Depends(auth)])
     async def add_box(body: BoxIn) -> Dict[str, Any]:
@@ -256,8 +262,10 @@ def create_app(store: BoxStore, remote: Remote, token: Optional[str] = None,
         box = box_or_404(name)
         if mode not in PROVISION_MODES:
             raise HTTPException(400, f"mode phải là {', '.join(PROVISION_MODES)}")
-        titles = {"check": "Kiểm tra box", "apply": "Chuẩn hoá box",
-                  "takeover": "Lược bỏ hệ vendor + chuẩn hoá", "revert": "Hoàn tác về cấu hình vendor"}
+        titles = {"check": "Kiểm tra box",
+                  "apply": "Chuẩn hoá box (lược hệ vendor + nạp image chính)",
+                  "takeover": "Chuẩn hoá box (lược hệ vendor + nạp image chính)",
+                  "revert": "Hoàn tác về cấu hình vendor"}
 
         async def run(job: Job) -> Any:
             rc = await remote.host_script(box, PROVISION_MODES[mode], job.log)
@@ -266,6 +274,16 @@ def create_app(store: BoxStore, remote: Remote, token: Optional[str] = None,
                     job.status = "failed"
                     return {"rc": rc}
                 raise RuntimeError(f"df-host.sh exit {rc}")
+            if mode == "apply":
+                # 1 nút trọn gói cho box mới: lược vendor (đã chạy phía trên) →
+                # resetprop (agent cần để áp hồ sơ lúc boot) → image chính.
+                await remote.install_resetprop(box, job.log)
+                main = box.main_image or store.default_main_image
+                if main:
+                    await remote.ensure_image(box, main, job.log)
+                    job.log(f"✓ box sẵn sàng tạo máy — image chính: {main}")
+                else:
+                    job.log("⚠ chưa đặt main_image trong boxes.yaml — bỏ qua bước nạp image chính")
             return {"rc": rc}
         return jobs.start("provision", name, titles[mode], run).as_dict()
 

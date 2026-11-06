@@ -8,8 +8,10 @@ thao tác chạm phản hồi nhanh.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
+import os
 import shlex
 from pathlib import Path
 from typing import Any, Awaitable, Callable, List, Optional, Sequence
@@ -17,6 +19,12 @@ from typing import Any, Awaitable, Callable, List, Optional, Sequence
 from .store import Box
 
 log = logging.getLogger(__name__)
+
+# kho image trên laptop (farm-image.sh pull ghi vào đây) + resetprop đã rút
+IMAGE_CACHE = Path(os.environ.get("DF_IMAGE_CACHE",
+                                  os.path.expanduser("~/.cache/devicefarm/images")))
+RESETPROP_SRC = Path(os.environ.get("DF_RESETPROP",
+                                    os.path.expanduser("~/.cache/devicefarm/integrity/magisk/resetprop")))
 
 
 class RemoteError(RuntimeError):
@@ -114,6 +122,103 @@ class Remote:
             proc.kill()
             raise RemoteError(f"df-host.sh quá {int(timeout)}s")
         return await proc.wait()
+
+    async def install_resetprop(self, box: Box, on_line: Callable[[str], Any]) -> bool:
+        """Đảm bảo /opt/df/resetprop trên box — df_agent cần nó để áp 77 props
+        hồ sơ + IMEI lúc máy vừa boot; thiếu là máy mới lộ fingerprint rockchip
+        thô (Google chặn). Trả True nếu đã có sẵn, False nếu vừa cài."""
+        rc, _, _ = await self._exec(
+            self.ssh_argv(box, self.sudo_cmd(box, "test -x /opt/df/resetprop")),
+            self.stdin_for(box, b""), 30)
+        if rc == 0:
+            on_line("resetprop: đã có sẵn trên box")
+            return True
+        if not RESETPROP_SRC.exists():
+            raise RemoteError(
+                f"thiếu {RESETPROP_SRC} — chạy ./tools/integrity/fetch-assets.sh trước "
+                "(máy mới sẽ KHÔNG có hồ sơ thiết bị nếu thiếu resetprop)")
+        data = RESETPROP_SRC.read_bytes()
+        cmd = self.sudo_cmd(
+            box, "sh -c 'mkdir -p /opt/df && cat > /opt/df/resetprop && chmod 755 /opt/df/resetprop'")
+        rc, _, err = await self._exec(self.ssh_argv(box, cmd), self.stdin_for(box, data), 60)
+        if rc != 0:
+            raise RemoteError(f"cài resetprop lỗi: {err.decode(errors='replace').strip()[-200:]}")
+        on_line(f"resetprop: đã cài /opt/df/resetprop (md5 {hashlib.md5(data).hexdigest()[:8]})")
+        return False
+
+    async def ensure_image(self, box: Box, image: str,
+                           on_line: Callable[[str], Any], timeout: float = 1800) -> bool:
+        """Image chính đã có trên box chưa? Thiếu thì nạp từ kho laptop
+        (~/.cache/devicefarm/images — farm-image.sh pull ghi vào) rồi đọc lại
+        chain-md5 trên box để xác nhận "chain nguyên vén" chứ không chỉ "load xong".
+        Trả True nếu đã có sẵn, False nếu vừa nạp."""
+        info = await self.agent(box, "images", timeout=60)
+        refs = {i.get("ref") for i in (info or {}).get("images", [])}
+        if image in refs:
+            on_line(f"image chính {image}: đã có sẵn trên box")
+            return True
+        mf = IMAGE_CACHE / "manifest.json"
+        if not mf.exists():
+            raise RemoteError(f"box thiếu image '{image}' và không thấy kho {mf} — "
+                              "nạp tay: ./tools/box/farm-image.sh push <alias> user@box")
+        ent = json.loads(mf.read_text()).get(image)
+        if not ent:
+            raise RemoteError(f"kho laptop không có '{image}' — chạy farm-image.sh pull trước")
+        f = IMAGE_CACHE / ent["file"]
+        if not f.exists():
+            raise RemoteError(f"thiếu file kho {f.name}")
+        on_line(f"verify sha256 {f.name} ({ent.get('size', 0) / 1e9:.2f} GB)…")
+        h = hashlib.sha256()
+        with open(f, "rb") as fh:
+            for chunk in iter(lambda: fh.read(16 << 20), b""):
+                h.update(chunk)
+        if h.hexdigest() != ent.get("sha256"):
+            raise RemoteError(f"sha256 {f.name} không khớp manifest — kho hỏng?")
+        on_line("sha256 ✓ — đẩy image vào box (docker load), chờ vài phút…")
+        cmd = self.sudo_cmd(box, "docker load")
+        proc = await asyncio.create_subprocess_exec(
+            *self.ssh_argv(box, cmd), stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+        assert proc.stdin and proc.stdout
+        pw = (box.sudo_password.encode() + b"\n") if box.sudo_password else b""
+
+        async def feed() -> None:
+            if pw:
+                proc.stdin.write(pw)
+                await proc.stdin.drain()
+            with open(f, "rb") as fh:
+                while True:
+                    chunk = fh.read(16 << 20)
+                    if not chunk:
+                        break
+                    proc.stdin.write(chunk)
+                    await proc.stdin.drain()
+            proc.stdin.close()
+
+        feeder = asyncio.create_task(feed())
+
+        async def pump() -> None:
+            async for line in proc.stdout:
+                on_line(line.decode(errors="replace").rstrip())
+
+        try:
+            await asyncio.wait_for(pump(), timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            raise RemoteError(f"docker load quá {int(timeout)}s")
+        rc = await proc.wait()
+        try:
+            await feeder
+        except Exception as e:   # noqa: BLE001
+            raise RemoteError(f"stream image lỗi: {e}")
+        if rc != 0:
+            raise RemoteError(f"docker load exit {rc}")
+        lib = await self.agent(box, "image-lib", image, timeout=180)
+        md5 = (lib or {}).get("md5") or ""
+        if ent.get("chain_md5") and md5 != ent["chain_md5"]:
+            raise RemoteError(f"chain md5 sau load ({md5[:8]}) ≠ kho ({ent['chain_md5'][:8]})")
+        on_line(f"image chính {image}: nạp xong, chain nguyên vén ✓ (md5 {md5[:8]})")
+        return False
 
     async def write_file(self, box: Box, path: str, data: bytes, timeout: float = 120,
                           skip_if_size: Optional[int] = None) -> bool:

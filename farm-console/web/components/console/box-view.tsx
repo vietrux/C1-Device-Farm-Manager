@@ -142,18 +142,20 @@ export function BoxView(p: Props) {
   const { box, info, devices } = p
   const ok = info && !("error" in info) ? info : null
 
-  const provision = async (mode: "check" | "apply" | "takeover" | "revert") => {
-    if (mode === "takeover") {
+  const provision = async (mode: "check" | "apply" | "revert") => {
+    if (mode === "apply") {
       const yes = await p.confirm({
-        title: "Lược bỏ hệ của hãng?",
-        ok: "Lược bỏ",
+        title: "Chuẩn hoá box?",
+        ok: "Chuẩn hoá",
         body: (
           <div className="grid gap-2">
             <p>
-              Tắt vĩnh viễn agent của hãng (<b>mytsvr</b>), xoá các container
-              Android và SDK của hãng (image và data của hãng vẫn giữ trên đĩa),
-              đóng Docker API đang mở ra mạng, và cài các service của mình:
-              tee-supplicant, tune GPU, tự reboot khi treo, mạng df-br.
+              Tất-tần-tật trong 1 lần bấm: tắt vĩnh viễn agent của hãng (<b
+              >mytsvr</b>), xoá các container Android và SDK của hãng (image và
+              data của hãng vẫn giữ trên đĩa), đóng Docker API đang mở ra mạng,
+              cài các service của mình (tee-supplicant, tune GPU, tự reboot khi
+              treo, mạng df-br), cài resetprop để máy có hồ sơ thiết bị, và nạp
+              image chính lên box nếu còn thiếu.
             </p>
             <p>
               App/SDK quản lý của hãng sẽ <b>ngừng hoạt động</b> với box này.
@@ -294,7 +296,7 @@ export function BoxView(p: Props) {
             <WandSparklesIcon />
             <AlertTitle>Box còn chạy hệ của hãng</AlertTitle>
             <AlertDescription>
-              Bấm “Lược bỏ hệ vendor” ở phần Chuẩn hoá host để tự vận hành.
+              Bấm “Chuẩn hoá” ở phần Chuẩn hoá host để tự vận hành.
             </AlertDescription>
           </Alert>
         )}
@@ -408,8 +410,9 @@ export function BoxView(p: Props) {
           <CardHeader>
             <CardTitle>Chuẩn hoá host</CardTitle>
             <CardDescription>
-              Box mới mua: <b>Lược bỏ hệ vendor</b> một lần là xong. Chạy lại
-              bao nhiêu lần cũng an toàn.
+              Box mới: bấm <b>Chuẩn hoá</b> một phát là xong — tự lược hệ
+              vendor, cài resetprop và nạp image chính. Chạy lại bao nhiêu
+              lần cũng an toàn.
             </CardDescription>
             <CardAction className="flex flex-wrap justify-end gap-2">
               <Button
@@ -418,20 +421,9 @@ export function BoxView(p: Props) {
                 onClick={() => provision("check")}
               >
                 <ShieldCheckIcon /> Kiểm tra
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => provision("apply")}
-              >
+                           </Button>
+              <Button size="sm" onClick={() => provision("apply")}>
                 <WandSparklesIcon /> Chuẩn hoá
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => provision("takeover")}
-              >
-                <Trash2Icon /> Lược bỏ hệ vendor
               </Button>
               <Tooltip>
                 <TooltipTrigger

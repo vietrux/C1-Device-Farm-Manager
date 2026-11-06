@@ -1,8 +1,15 @@
 # Sao chép thành ~/.config/farm-console/boxes.yaml rồi điền thông tin box của bạn.
 # File này chứa mật khẩu — console đặt permission 600 khi tự ghi; tự tạo thì nên
 # chmod 600. Đừng commit file thật vào repo.
+
+# Image chính của cả cụm (mặc định cho máy mới + nút Chuẩn hoá tự nạp lên box
+# còn thiếu, từ kho ~/.cache/devicefarm/images — xem tools/box/farm-image.sh).
+# Có thể override từng box bằng key main_image: dưới từng box.
+main_image: dobox:Q12_gms_202510101644
+
 boxes:
   - name: box-01
     ssh: user@100.x.y.z          # địa chỉ Tailscale của box
     sudo_password: mat-khau-sudo # mật khẩu sudo của user trên box
     note: box đầu tiên
+    # main_image: dobox:khac      # (tuỳ chọn) image chính riêng cho box này

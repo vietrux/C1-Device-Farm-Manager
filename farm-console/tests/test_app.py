@@ -52,6 +52,16 @@ class FakeRemote:
         on_line("  [ OK ] docker   DOCKER_OPTS=...")
         return 0
 
+    async def install_resetprop(self, box, on_line):
+        self.calls.append(("resetprop",))
+        on_line("resetprop: đã có sẵn trên box")
+        return True
+
+    async def ensure_image(self, box, image, on_line, timeout: float = 1800):
+        self.calls.append(("ensure-image", image))
+        on_line(f"image chính {image}: đã có sẵn trên box")
+        return True
+
     async def check_ssh(self, box):
         return None
 
@@ -164,15 +174,43 @@ def test_unknown_box_404(env):
     assert c.get("/api/boxes/nope/info").status_code == 404
 
 
-def test_provision_job(env):
+def test_provision_apply_is_one_button_takeover(env):
+    """Nút Chuẩn hoá = trọn gói: apply --takeover + resetprop + image chính."""
     c, store, remote, _ = env
     store.add("b1", "user@h", "p")
-    j = c.post("/api/boxes/b1/provision/takeover").json()
+    store.get("b1").main_image = "dobox:Q12_gms_mau"
+    j = c.post("/api/boxes/b1/provision/apply").json()
+    done = wait_job(c, j["id"])
+    assert done["status"] == "ok", done["lines"]
+    assert ("host", "apply", "--takeover") in remote.calls
+    assert ("resetprop",) in remote.calls
+    assert ("ensure-image", "dobox:Q12_gms_mau") in remote.calls
+    assert any("image chính" in l for l in done["lines"])
+    # bí danh cũ takeover vẫn chạy như apply
+    j2 = c.post("/api/boxes/b1/provision/takeover").json()
+    assert wait_job(c, j2["id"])["status"] == "ok"
+    assert c.post("/api/boxes/b1/provision/rm-rf").status_code == 400
+
+
+def test_provision_apply_without_main_image_skips_push(env):
+    c, store, remote, _ = env
+    store.add("b1", "user@h", "p")
+    j = c.post("/api/boxes/b1/provision/apply").json()
     done = wait_job(c, j["id"])
     assert done["status"] == "ok"
-    assert ("host", "apply", "--takeover") in remote.calls
-    assert any("[ OK ] docker" in l for l in done["lines"])
-    assert c.post("/api/boxes/b1/provision/rm-rf").status_code == 400
+    assert not any(a[0] == "ensure-image" for a in remote.calls)
+    assert any("chưa đặt main_image" in l for l in done["lines"])
+
+
+def test_boxes_payload_has_main_image(env):
+    c, store, *_ = env
+    store.add("b1", "user@h", "p")
+    store.get("b1").main_image = "dobox:Q12_gms_mau"
+    store.add("b2", "user@h2", "p")
+    store.default_main_image = "dobox:Q12_gms_macdinh"
+    boxes = {b["name"]: b for b in c.get("/api/boxes").json()}
+    assert boxes["b1"]["main_image"] == "dobox:Q12_gms_mau"     # override từng box
+    assert boxes["b2"]["main_image"] == "dobox:Q12_gms_macdinh" # mặc định chung
 
 
 def test_create_device_waits_boot_then_autostart(env):

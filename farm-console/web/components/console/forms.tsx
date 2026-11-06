@@ -98,7 +98,7 @@ export function AddBoxDialog({
                 id="ssh"
                 name="ssh"
                 required
-                placeholder="user@<ip-tailscale-của-box>"
+                placeholder="user@100.98.135.123"
               />
             </Field>
             <Field>
@@ -221,17 +221,23 @@ function CreateDeviceForm({
   const { busy, run } = useSubmit()
   const [images, setImages] = React.useState<Image[] | null>(null)
   const [image, setImage] = React.useState<string | null>(null)
+  const [mainImage, setMainImage] = React.useState<string | null>(null)
   const [profiles, setProfiles] = React.useState<Profile[] | null>(null)
   const [profile, setProfile] = React.useState<string>("auto")
   const [autostart, setAutostart] = React.useState(true)
 
   React.useEffect(() => {
     let alive = true
+    // image chính của box (main_image trong boxes.yaml) — mặc định cho máy mới
+    api<Box[]>(`/api/boxes`)
+      .then((r) => {
+        if (alive) setMainImage(r.find((b) => b.name === box)?.main_image ?? null)
+      })
+      .catch(() => {})
     api<{ images: Image[] }>(`/api/boxes/${enc(box)}/images`)
       .then((r) => {
         if (!alive) return
         setImages(r.images)
-        setImage(r.images[0]?.ref ?? null)
       })
       .catch((e) => {
         if (!alive) return
@@ -245,6 +251,11 @@ function CreateDeviceForm({
       alive = false
     }
   }, [box])
+
+  // Ưu tiên image chính; chưa biết thì tạm chọn image đầu (agent sắp proven lên trước)
+  React.useEffect(() => {
+    if (images) setImage(mainImage && images.some((i) => i.ref === mainImage) ? mainImage : images[0]?.ref ?? null)
+  }, [images, mainImage])
 
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
