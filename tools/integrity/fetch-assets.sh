@@ -72,6 +72,10 @@ PY
 # one directory.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cp "$HERE/device/farm-magisk.sh" "$DEST/magisk/farm-magisk.sh"
+# resetprop = binary magisk đổi tên (multi-call applet theo argv[0]) — df_agent
+# copy sang /opt/df/resetprop trên box để áp hồ sơ thiết bị lúc máy vừa boot;
+# provision-box.sh tự cài lên box khi apply.
+cp "$DEST/magisk/magisk" "$DEST/magisk/resetprop"
 cat > "$DEST/magisk/farm-magisk.conf" <<'CONF'
 ZYGISK=1
 MAGISK_DAEMON=magisk
