@@ -98,7 +98,7 @@ export function AddBoxDialog({
                 id="ssh"
                 name="ssh"
                 required
-                placeholder="user@100.98.135.123"
+                placeholder="user@100.x.y.z"
               />
             </Field>
             <Field>
@@ -109,7 +109,7 @@ export function AddBoxDialog({
                 id="sudo_password"
                 name="sudo_password"
                 type="password"
-                placeholder="box vendor mặc định: myt"
+                placeholder="mật khẩu sudo của box"
               />
               <FieldDescription>
                 Lưu ở máy chạy console (file quyền 0600), không gửi đi nơi khác.
